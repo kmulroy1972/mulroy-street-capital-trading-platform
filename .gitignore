@@ -1,0 +1,51 @@
+# Environment variables with secrets
+.env
+.env.local
+.env.production
+.env.development
+
+# Sensitive files
+token.txt
+*key.pem
+*.key
+*.pem
+
+# Build outputs
+node_modules/
+.next/
+out/
+dist/
+build/
+
+# Cache
+.pytest_cache/
+.cache/
+.turbo/
+
+# OS files  
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+*.log
+api.log
+api_restart.log
+
+# Archives
+*.tar.gz
+*.zip
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+venv/
+.venv/

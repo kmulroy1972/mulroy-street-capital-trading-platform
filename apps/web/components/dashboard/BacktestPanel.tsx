@@ -1,0 +1,429 @@
+'use client';
+
+import { useState } from 'react';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
+import { CalendarIcon, PlayIcon, CogIcon, DocumentDownloadIcon } from '@heroicons/react/24/outline';
+
+interface BacktestConfig {
+  strategy: string;
+  symbols: string[];
+  startDate: string;
+  endDate: string;
+  initialCapital: number;
+  timeframe: string;
+  optimize: boolean;
+  walkForward: boolean;
+}
+
+interface BacktestResults {
+  metrics: {
+    return_pct: number;
+    sharpe_ratio: number;
+    sortino_ratio: number;
+    max_drawdown: number;
+    win_rate: number;
+    total_trades: number;
+    profit_factor: number;
+    calmar_ratio: number;
+    total_pnl: number;
+  };
+  equity_curve: { timestamp: string; equity: number }[];
+  trades: {
+    timestamp: string;
+    symbol: string;
+    side: string;
+    quantity: number;
+    price: number;
+    pnl: number;
+  }[];
+}
+
+export function BacktestPanel() {
+  const [config, setConfig] = useState<BacktestConfig>({
+    strategy: 'mean_reversion',
+    symbols: ['SPY'],
+    startDate: new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+    endDate: new Date().toISOString().split('T')[0],
+    initialCapital: 100000,
+    timeframe: '5Min',
+    optimize: false,
+    walkForward: false,
+  });
+
+  const [results, setResults] = useState<BacktestResults | null>(null);
+  const [isRunning, setIsRunning] = useState(false);
+  const [availableStrategies] = useState(['mean_reversion', 'momentum', 'pairs_trading']);
+
+  const runBacktest = async () => {
+    setIsRunning(true);
+    try {
+      const response = await fetch('/api/backtest', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(config),
+      });
+      
+      if (!response.ok) throw new Error('Backtest failed');
+      
+      const data = await response.json();
+      setResults(data);
+    } catch (error) {
+      console.error('Backtest error:', error);
+    } finally {
+      setIsRunning(false);
+    }
+  };
+
+  const downloadReport = async () => {
+    if (!results) return;
+    
+    try {
+      const response = await fetch('/api/backtest/report', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ results, config }),
+      });
+      
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `backtest_${config.strategy}_${Date.now()}.html`;
+      a.click();
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Report download error:', error);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Configuration Panel */}
+      <div className="glass-card p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-semibold text-text-primary">Backtest Configuration</h2>
+          <div className="flex gap-2">
+            <button
+              onClick={runBacktest}
+              disabled={isRunning}
+              className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary/80 disabled:bg-primary/50 text-black rounded-md font-medium transition-colors"
+            >
+              <PlayIcon className="w-4 h-4" />
+              {isRunning ? 'Running...' : 'Run Backtest'}
+            </button>
+            {results && (
+              <button
+                onClick={downloadReport}
+                className="flex items-center gap-2 px-4 py-2 bg-surface-secondary hover:bg-surface-secondary/80 text-text-primary rounded-md font-medium transition-colors"
+              >
+                <DocumentDownloadIcon className="w-4 h-4" />
+                Download Report
+              </button>
+            )}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          {/* Strategy Selection */}
+          <div>
+            <label className="block text-sm font-medium text-text-secondary mb-2">Strategy</label>
+            <select
+              value={config.strategy}
+              onChange={(e) => setConfig({ ...config, strategy: e.target.value })}
+              className="w-full bg-surface-secondary border border-border rounded-md px-3 py-2 text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/50"
+            >
+              {availableStrategies.map((strategy) => (
+                <option key={strategy} value={strategy}>
+                  {strategy.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Symbols */}
+          <div>
+            <label className="block text-sm font-medium text-text-secondary mb-2">Symbols</label>
+            <input
+              type="text"
+              value={config.symbols.join(', ')}
+              onChange={(e) => setConfig({ 
+                ...config, 
+                symbols: e.target.value.split(',').map(s => s.trim()).filter(Boolean)
+              })}
+              placeholder="SPY, QQQ, IWM"
+              className="w-full bg-surface-secondary border border-border rounded-md px-3 py-2 text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/50"
+            />
+          </div>
+
+          {/* Date Range */}
+          <div>
+            <label className="block text-sm font-medium text-text-secondary mb-2">Start Date</label>
+            <input
+              type="date"
+              value={config.startDate}
+              onChange={(e) => setConfig({ ...config, startDate: e.target.value })}
+              className="w-full bg-surface-secondary border border-border rounded-md px-3 py-2 text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/50"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-text-secondary mb-2">End Date</label>
+            <input
+              type="date"
+              value={config.endDate}
+              onChange={(e) => setConfig({ ...config, endDate: e.target.value })}
+              className="w-full bg-surface-secondary border border-border rounded-md px-3 py-2 text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/50"
+            />
+          </div>
+
+          {/* Capital & Timeframe */}
+          <div>
+            <label className="block text-sm font-medium text-text-secondary mb-2">Initial Capital</label>
+            <input
+              type="number"
+              value={config.initialCapital}
+              onChange={(e) => setConfig({ ...config, initialCapital: Number(e.target.value) })}
+              className="w-full bg-surface-secondary border border-border rounded-md px-3 py-2 text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/50"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-text-secondary mb-2">Timeframe</label>
+            <select
+              value={config.timeframe}
+              onChange={(e) => setConfig({ ...config, timeframe: e.target.value })}
+              className="w-full bg-surface-secondary border border-border rounded-md px-3 py-2 text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/50"
+            >
+              <option value="1Min">1 Minute</option>
+              <option value="5Min">5 Minutes</option>
+              <option value="15Min">15 Minutes</option>
+              <option value="30Min">30 Minutes</option>
+              <option value="1Hour">1 Hour</option>
+              <option value="1Day">1 Day</option>
+            </select>
+          </div>
+
+          {/* Advanced Options */}
+          <div className="flex flex-col gap-2">
+            <label className="block text-sm font-medium text-text-secondary">Advanced Options</label>
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={config.optimize}
+                onChange={(e) => setConfig({ ...config, optimize: e.target.checked })}
+                className="rounded border-border bg-surface-secondary focus:ring-primary/50"
+              />
+              <span className="text-sm text-text-primary">Parameter Optimization</span>
+            </label>
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={config.walkForward}
+                onChange={(e) => setConfig({ ...config, walkForward: e.target.checked })}
+                className="rounded border-border bg-surface-secondary focus:ring-primary/50"
+              />
+              <span className="text-sm text-text-primary">Walk-Forward Analysis</span>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      {/* Results Display */}
+      {results && (
+        <>
+          {/* Key Metrics */}
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-4">
+            <div className="glass-card p-4">
+              <p className="text-xs text-text-secondary">Total Return</p>
+              <p className={`text-lg font-bold ${results.metrics.return_pct >= 0 ? 'text-primary' : 'text-red-400'}`}>
+                {results.metrics.return_pct?.toFixed(2) || "0.00"}%
+              </p>
+            </div>
+            <div className="glass-card p-4">
+              <p className="text-xs text-text-secondary">Sharpe Ratio</p>
+              <p className="text-lg font-bold text-text-primary">{results.metrics.sharpe_ratio?.toFixed(2) || "0.00"}</p>
+            </div>
+            <div className="glass-card p-4">
+              <p className="text-xs text-text-secondary">Sortino Ratio</p>
+              <p className="text-lg font-bold text-text-primary">{results.metrics.sortino_ratio?.toFixed(2) || "0.00"}</p>
+            </div>
+            <div className="glass-card p-4">
+              <p className="text-xs text-text-secondary">Max Drawdown</p>
+              <p className="text-lg font-bold text-red-400">{((results.metrics.max_drawdown ?? 0) * 100).toFixed(2)}%</p>
+            </div>
+            <div className="glass-card p-4">
+              <p className="text-xs text-text-secondary">Win Rate</p>
+              <p className="text-lg font-bold text-text-primary">{((results.metrics.win_rate ?? 0) * 100).toFixed(1)}%</p>
+            </div>
+            <div className="glass-card p-4">
+              <p className="text-xs text-text-secondary">Total Trades</p>
+              <p className="text-lg font-bold text-text-primary">{results.metrics.total_trades}</p>
+            </div>
+            <div className="glass-card p-4">
+              <p className="text-xs text-text-secondary">Profit Factor</p>
+              <p className="text-lg font-bold text-text-primary">{results.metrics.profit_factor?.toFixed(2) || "0.00"}</p>
+            </div>
+            <div className="glass-card p-4">
+              <p className="text-xs text-text-secondary">Calmar Ratio</p>
+              <p className="text-lg font-bold text-text-primary">{results.metrics.calmar_ratio?.toFixed(2) || "0.00"}</p>
+            </div>
+          </div>
+
+          {/* Charts */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Equity Curve */}
+            <div className="glass-card p-6">
+              <h3 className="text-lg font-semibold text-text-primary mb-4">Equity Curve</h3>
+              <div className="h-80">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={results.equity_curve}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
+                    <XAxis 
+                      dataKey="timestamp" 
+                      stroke="#71717a"
+                      style={{ fontSize: '12px' }}
+                      tickFormatter={(value) => new Date(value).toLocaleDateString()}
+                    />
+                    <YAxis 
+                      stroke="#71717a"
+                      style={{ fontSize: '12px' }}
+                      tickFormatter={(value) => `$${(value / 1000)?.toFixed(0) || "0"}k`}
+                    />
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: '#111215',
+                        border: '1px solid #27272a',
+                        borderRadius: '8px',
+                      }}
+                      labelFormatter={(value) => new Date(value).toLocaleDateString()}
+                      formatter={(value: number) => [`$${value.toLocaleString()}`, 'Equity']}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="equity"
+                      stroke="#00ff88"
+                      strokeWidth={2}
+                      dot={false}
+                      activeDot={{ r: 4, fill: '#00ff88' }}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+            {/* Returns Distribution */}
+            <div className="glass-card p-6">
+              <h3 className="text-lg font-semibold text-text-primary mb-4">Daily Returns Distribution</h3>
+              <div className="h-80">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={results.trades.slice(-50).map(trade => ({
+                    date: trade.timestamp,
+                    return_pct: ((trade.pnl ?? 0) / (config.initialCapital || 1)) * 100
+                  }))}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
+                    <XAxis 
+                      dataKey="date" 
+                      stroke="#71717a"
+                      style={{ fontSize: '12px' }}
+                      tickFormatter={(value) => new Date(value).toLocaleDateString()}
+                    />
+                    <YAxis 
+                      stroke="#71717a"
+                      style={{ fontSize: '12px' }}
+                      tickFormatter={(value) => `${value?.toFixed(1) || "0.0"}%`}
+                    />
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: '#111215',
+                        border: '1px solid #27272a',
+                        borderRadius: '8px',
+                      }}
+                      formatter={(value: number) => [`${value?.toFixed(2) || "0.00"}%`, 'Return']}
+                    />
+                    <Bar
+                      dataKey="return_pct"
+                      fill="#00d4ff"
+                      radius={[2, 2, 0, 0]}
+                    />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          </div>
+
+          {/* Trade Log */}
+          <div className="glass-card p-6">
+            <h3 className="text-lg font-semibold text-text-primary mb-4">Recent Trades</h3>
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-border">
+                    <th className="text-left py-2 px-3 text-sm font-medium text-text-secondary">Date</th>
+                    <th className="text-left py-2 px-3 text-sm font-medium text-text-secondary">Symbol</th>
+                    <th className="text-left py-2 px-3 text-sm font-medium text-text-secondary">Side</th>
+                    <th className="text-right py-2 px-3 text-sm font-medium text-text-secondary">Quantity</th>
+                    <th className="text-right py-2 px-3 text-sm font-medium text-text-secondary">Price</th>
+                    <th className="text-right py-2 px-3 text-sm font-medium text-text-secondary">P&L</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {results.trades.slice(-20).map((trade, index) => (
+                    <tr key={index} className="border-b border-border/50">
+                      <td className="py-2 px-3 text-sm text-text-primary">
+                        {new Date(trade.timestamp).toLocaleDateString()} {new Date(trade.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </td>
+                      <td className="py-2 px-3 text-sm text-text-primary font-mono">{trade.symbol}</td>
+                      <td className="py-2 px-3 text-sm">
+                        <span className={`px-2 py-1 rounded text-xs font-medium ${
+                          trade.side.toUpperCase() === 'BUY' 
+                            ? 'bg-primary/20 text-primary' 
+                            : 'bg-red-500/20 text-red-400'
+                        }`}>
+                          {trade.side.toUpperCase()}
+                        </span>
+                      </td>
+                      <td className="py-2 px-3 text-sm text-text-primary text-right">{trade.quantity}</td>
+                      <td className="py-2 px-3 text-sm text-text-primary text-right font-mono">
+                        ${trade.price?.toFixed(2) || "0.00"}
+                      </td>
+                      <td className={`py-2 px-3 text-sm text-right font-mono font-medium ${
+                        trade.pnl >= 0 ? 'text-primary' : 'text-red-400'
+                      }`}>
+                        ${trade.pnl >= 0 ? '+' : ''}${trade.pnl?.toFixed(2) || "0.00"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Loading State */}
+      {isRunning && (
+        <div className="glass-card p-8 text-center">
+          <div className="inline-flex items-center gap-3">
+            <div className="animate-spin rounded-full h-6 w-6 border-2 border-primary border-t-transparent"></div>
+            <span className="text-text-primary">
+              {config.optimize ? 'Optimizing parameters...' : 
+               config.walkForward ? 'Running walk-forward analysis...' : 
+               'Running backtest...'}
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* No Results State */}
+      {!results && !isRunning && (
+        <div className="glass-card p-8 text-center">
+          <CogIcon className="w-12 h-12 text-text-secondary mx-auto mb-4" />
+          <h3 className="text-lg font-semibold text-text-primary mb-2">Ready to Backtest</h3>
+          <p className="text-text-secondary">
+            Configure your strategy parameters above and click "Run Backtest" to begin analysis.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}

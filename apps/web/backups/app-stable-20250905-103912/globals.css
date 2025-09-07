@@ -1,0 +1,16 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    background-color: #0a0b0d;
+    color: #e4e4e7;
+  }
+}
+
+@layer components {
+  .glass-card {
+    @apply bg-[#111215]/80 backdrop-blur-md border border-[#27272a] rounded-lg;
+  }
+}

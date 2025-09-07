@@ -1,0 +1,32 @@
+# AI Agent Rules for Alpaca Trader
+
+## Security Rules
+- NEVER commit secrets, API keys, passwords, or any sensitive credentials to the repository
+- Always check code for hardcoded secrets before suggesting commits
+- Use environment variables or secure vaults for all sensitive data
+- Review .env files to ensure they only contain example values
+
+## Testing Requirements
+- ANY changes to packages/core/risk/* MUST include corresponding tests
+- Risk management code changes require comprehensive test coverage
+- Run existing tests before suggesting changes to risk management components
+- Document test cases for complex risk calculations
+
+## API Documentation
+- ALL API endpoint changes MUST include OpenAPI specification updates
+- Update API documentation when adding, modifying, or removing endpoints
+- Ensure request/response schemas are documented in OpenAPI spec
+- Validate API changes against existing OpenAPI definitions
+
+## Code Quality Standards
+- ALWAYS use type hints in Python code
+- Include return type annotations for all functions
+- Use proper type annotations for function parameters
+- Prefer explicit types over Any when possible
+- Use typing module imports (List, Dict, Optional, etc.) when needed
+
+## General Guidelines
+- Follow existing code patterns and conventions
+- Maintain consistent formatting using the project's .editorconfig
+- Use descriptive variable and function names
+- Keep functions focused and single-purpose

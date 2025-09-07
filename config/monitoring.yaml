@@ -1,0 +1,62 @@
+monitoring:
+  # Alert channels
+  alerts:
+    discord:
+      enabled: false
+      webhook_url: "YOUR_WEBHOOK_URL"
+      min_severity: warning
+    
+    email:
+      enabled: false
+      smtp_host: "smtp.gmail.com"
+      smtp_port: 587
+      username: "your-email@gmail.com"
+      password: "your-app-password"
+      from_email: "alerts@mulroystreet.capital"
+      to_emails:
+        - "trader@example.com"
+      min_severity: error
+    
+    sms:
+      enabled: false
+      account_sid: "YOUR_TWILIO_SID"
+      auth_token: "YOUR_TWILIO_TOKEN"
+      from_number: "+1234567890"
+      to_numbers:
+        - "+0987654321"
+      min_severity: critical
+  
+  # Thresholds
+  thresholds:
+    heartbeat_timeout: 60  # seconds
+    daily_loss_limit: 1000  # dollars
+    order_reject_rate: 0.1  # 10%
+    latency_95th: 1000  # milliseconds
+    error_rate: 0.05  # 5%
+    position_concentration: 0.3  # 30%
+    max_drawdown: 0.15  # 15%
+  
+  # Metrics collection
+  metrics:
+    prometheus:
+      enabled: true
+      port: 9090
+      path: "/metrics"
+    
+    retention:
+      detailed: 7  # days
+      aggregated: 30  # days
+  
+  # Logging
+  logging:
+    level: INFO
+    format: json
+    outputs:
+      - file: logs/trading.jsonl
+      - console: true
+    
+    # Log rotation
+    rotation:
+      max_size: "100MB"
+      max_age: 30  # days
+      max_backups: 10

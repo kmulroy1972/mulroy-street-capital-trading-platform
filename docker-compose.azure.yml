@@ -1,0 +1,131 @@
+version: '3.8'
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: ${AZURE_DATABASE_URL}
+      REDIS_URL: ${AZURE_REDIS_URL}
+      JWT_SECRET: ${JWT_SECRET}
+      APCA_API_KEY_ID: ${APCA_API_KEY_ID}
+      APCA_API_SECRET_KEY: ${APCA_API_SECRET_KEY}
+      ENVIRONMENT: azure-local
+    volumes:
+      - ./logs:/app/logs
+    networks:
+      - alpaca-net
+    restart: unless-stopped
+
+  engine:
+    build:
+      context: .
+      dockerfile: apps/engine/Dockerfile
+    environment:
+      DATABASE_URL: ${AZURE_DATABASE_URL}
+      REDIS_URL: ${AZURE_REDIS_URL}
+      APCA_API_KEY_ID: ${APCA_API_KEY_ID}
+      APCA_API_SECRET_KEY: ${APCA_API_SECRET_KEY}
+      ENGINE_ID: engine-azure-local-001
+      REQUIRE_CONFIRMATION: "true"
+      ENVIRONMENT: azure-local
+    volumes:
+      - ./logs:/app/logs
+      - ./packages:/app/packages
+      - ./scripts:/app/scripts
+    networks:
+      - alpaca-net
+    restart: unless-stopped
+    depends_on:
+      - api
+
+  web:
+    build:
+      context: apps/web
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8000
+      NEXT_PUBLIC_ENVIRONMENT: azure-local
+    networks:
+      - alpaca-net
+    restart: unless-stopped
+
+  # Local Redis for development (when not using Azure Redis)
+  redis-local:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - alpaca-net
+    command: redis-server --appendonly yes
+    profiles:
+      - local
+
+  # Local PostgreSQL for development (when not using Azure DB)
+  postgres-local:
+    image: postgres:15-alpine
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: alpacaadmin
+      POSTGRES_PASSWORD: localdev123
+      POSTGRES_DB: alpaca_trader
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./infra/schema.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - alpaca-net
+    profiles:
+      - local
+
+  # Prometheus for metrics
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    networks:
+      - alpaca-net
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--web.enable-lifecycle'
+    profiles:
+      - monitoring
+
+  # Grafana for dashboards
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3001:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin123
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards
+      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources
+    networks:
+      - alpaca-net
+    profiles:
+      - monitoring
+
+volumes:
+  redis_data:
+  postgres_data:
+  prometheus_data:
+  grafana_data:
+
+networks:
+  alpaca-net:
+    driver: bridge

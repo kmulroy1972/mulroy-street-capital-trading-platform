@@ -1,0 +1,253 @@
+'use client';
+
+import { useState, useEffect } from 'react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { LineChart, Line, AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { Activity, AlertTriangle, TrendingUp, Clock, Zap, Target } from 'lucide-react';
+
+interface MetricsData {
+  timestamp: string;
+  pnl: {
+    daily: number;
+    total: number;
+  };
+  risk: {
+    score: number;
+    max_drawdown: number;
+  };
+  orders: {
+    placed: number;
+    filled: number;
+    rejected: number;
+  };
+  alerts: {
+    active: number;
+    total: number;
+  };
+  latency: {
+    p50: number;
+    p95: number;
+    p99: number;
+  };
+  orderFlow: Array<{
+    time: string;
+    placed: number;
+    filled: number;
+    rejected: number;
+  }>;
+  latencyBuckets: Array<{
+    bucket: string;
+    count: number;
+  }>;
+}
+
+interface MetricsDashboardProps {
+  editMode?: boolean;
+}
+
+export default function MetricsDashboard({ editMode = false }: MetricsDashboardProps) {
+  const [timeRange, setTimeRange] = useState('1h');
+  const [autoRefresh, setAutoRefresh] = useState(true);
+  const [metrics, setMetrics] = useState<MetricsData | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchMetrics = async () => {
+      try {
+        const response = await fetch(`/api/monitoring/metrics?timerange=${timeRange}`);
+        const data = await response.json();
+        setMetrics(data);
+      } catch (error) {
+        console.error('Failed to fetch metrics:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchMetrics();
+    
+    if (autoRefresh) {
+      const interval = setInterval(fetchMetrics, 5000); // Update every 5 seconds
+      return () => clearInterval(interval);
+    }
+  }, [timeRange, autoRefresh]);
+
+  if (isLoading) {
+    return (
+      <Card className="bg-card border-muted h-full">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm font-medium">System Metrics</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="animate-pulse space-y-4">
+            <div className="grid grid-cols-4 gap-2">
+              {[...Array(4)].map((_, i) => (
+                <div key={i} className="h-16 bg-muted rounded"></div>
+              ))}
+            </div>
+            <div className="h-32 bg-muted rounded"></div>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const fillRate = metrics?.orders ? (metrics.orders.filled / metrics.orders.placed * 100) : 0;
+  const rejectionRate = metrics?.orders ? (metrics.orders.rejected / metrics.orders.placed * 100) : 0;
+
+  return (
+    <Card className="bg-card border-muted h-full">
+      <CardHeader className="pb-2">
+        <CardTitle className="text-sm font-medium flex items-center justify-between">
+          <span>System Metrics</span>
+          <div className="flex items-center gap-2">
+            <div className="flex gap-1">
+              {['1h', '6h', '24h', '7d'].map((range) => (
+                <Button
+                  key={range}
+                  variant={timeRange === range ? "default" : "ghost"}
+                  size="sm"
+                  onClick={() => setTimeRange(range)}
+                  className="text-xs h-6 px-2"
+                >
+                  {range}
+                </Button>
+              ))}
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setAutoRefresh(!autoRefresh)}
+              className={`p-1 h-6 w-6 ${autoRefresh ? 'text-primary' : 'text-muted-foreground'}`}
+            >
+              <Activity className="w-3 h-3" />
+            </Button>
+          </div>
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {/* Key Metrics Grid */}
+        <div className="grid grid-cols-2 gap-2">
+          <div className="p-2 rounded bg-muted/30">
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-xs text-muted-foreground">Latency P95</span>
+              <Clock className="w-3 h-3 text-muted-foreground" />
+            </div>
+            <p className="text-lg font-bold text-primary">
+              {metrics?.latency?.p95 || 0}ms
+            </p>
+          </div>
+
+          <div className="p-2 rounded bg-muted/30">
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-xs text-muted-foreground">Fill Rate</span>
+              <Target className="w-3 h-3 text-green-400" />
+            </div>
+            <p className="text-lg font-bold text-green-400">
+              {fillRate.toFixed(1)}%
+            </p>
+          </div>
+
+          <div className="p-2 rounded bg-muted/30">
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-xs text-muted-foreground">Rejection Rate</span>
+              <AlertTriangle className="w-3 h-3 text-orange-400" />
+            </div>
+            <p className="text-lg font-bold text-orange-400">
+              {rejectionRate.toFixed(1)}%
+            </p>
+          </div>
+
+          <div className="p-2 rounded bg-muted/30">
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-xs text-muted-foreground">Active Alerts</span>
+              <Zap className="w-3 h-3 text-red-400" />
+            </div>
+            <p className="text-lg font-bold text-red-400">
+              {metrics?.alerts?.active || 0}
+            </p>
+          </div>
+        </div>
+
+        {/* Order Flow Chart */}
+        <div className="space-y-2">
+          <h4 className="text-xs font-medium text-muted-foreground">Order Flow</h4>
+          <div className="h-24">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={metrics?.orderFlow || []}>
+                <XAxis 
+                  dataKey="time" 
+                  stroke="#71717a"
+                  style={{ fontSize: '8px' }}
+                  hide
+                />
+                <YAxis hide />
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: 'hsl(var(--card))',
+                    border: '1px solid hsl(var(--border))',
+                    borderRadius: '6px',
+                    fontSize: '10px'
+                  }}
+                />
+                <Area
+                  type="monotone"
+                  dataKey="filled"
+                  stackId="1"
+                  stroke="hsl(var(--primary))"
+                  fill="hsl(var(--primary))"
+                  fillOpacity={0.3}
+                />
+                <Area
+                  type="monotone"
+                  dataKey="placed"
+                  stackId="1"
+                  stroke="#10b981"
+                  fill="#10b981"
+                  fillOpacity={0.2}
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        {/* Performance Summary */}
+        <div className="grid grid-cols-3 gap-2 text-xs">
+          <div>
+            <div className="text-muted-foreground">Orders Today</div>
+            <div className="text-primary font-medium">
+              {metrics?.orders?.placed || 0}
+            </div>
+          </div>
+          <div>
+            <div className="text-muted-foreground">Risk Score</div>
+            <div className={`font-medium ${
+              (metrics?.risk?.score || 0) > 70 ? 'text-red-400' :
+              (metrics?.risk?.score || 0) > 40 ? 'text-orange-400' : 'text-green-400'
+            }`}>
+              {metrics?.risk?.score || 0}/100
+            </div>
+          </div>
+          <div>
+            <div className="text-muted-foreground">Max Drawdown</div>
+            <div className="text-red-400 font-medium">
+              {((metrics?.risk?.max_drawdown || 0) * 100).toFixed(1)}%
+            </div>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="flex justify-between text-[10px] text-muted-foreground pt-2 border-t border-muted">
+          <div className="flex items-center gap-1">
+            <div className="w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse"></div>
+            Monitoring
+          </div>
+          <div>
+            Last: {metrics?.timestamp ? new Date(metrics.timestamp).toLocaleTimeString() : '--:--:--'}
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
